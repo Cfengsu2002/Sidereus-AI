@@ -5,8 +5,8 @@
  */
 function resolveApiBaseUrl() {
   const meta = document.querySelector('meta[name="api-base"]');
-  const raw = meta?.getAttribute("content")?.trim() ?? "";
-  if (raw) return raw.replace(/\/$/, "");
+  const fromMeta = meta?.getAttribute("content")?.trim();
+  if (fromMeta) return fromMeta.replace(/\/$/, "");
   const { hostname, port } = window.location;
   if (hostname === "127.0.0.1" || hostname === "localhost") {
     // 仅「静态页单独起在 5500」时指向本机后端；Docker 9000 / uvicorn 8000 等与 API 同源
@@ -17,21 +17,6 @@ function resolveApiBaseUrl() {
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
-
-document.addEventListener("DOMContentLoaded", () => {
-  const meta = document.querySelector('meta[name="api-base"]');
-  const apiMeta = meta?.getAttribute("content")?.trim() ?? "";
-  const onGithubPages = /\.github\.io$/i.test(window.location.hostname);
-  if (onGithubPages && !apiMeta) {
-    const banner = document.createElement("div");
-    banner.setAttribute("role", "alert");
-    banner.style.cssText =
-      "background:#fef3c7;color:#92400e;padding:12px 16px;text-align:center;font-size:14px;line-height:1.5";
-    banner.textContent =
-      "GitHub Pages：请在 frontend/index.html 中为 meta api-base 填写 Railway 后端 HTTPS 地址（无末尾 /），或在仓库 Secrets 中配置 RAILWAY_PUBLIC_URL 后重新部署 Pages。";
-    document.body.prepend(banner);
-  }
-});
 
 const analyzeBtn = document.getElementById("analyzeBtn");
 const copyJsonBtn = document.getElementById("copyJsonBtn");

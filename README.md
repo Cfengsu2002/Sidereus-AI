@@ -122,38 +122,13 @@ docker run --rm -p 9000:9000 --env-file .env -e PORT=9000 resume-api:latest
 
 或使用 `docker compose up --build`（参见仓库内 `docker-compose.yml`）。
 
-### 3.3 GitHub Pages（笔试「前端须公网」的第二种交付）
+### 3.3 前端单独托管（GitHub Pages 等，可选）
 
-后端 API 仍在 **Railway**。静态前端由本仓库 **GitHub Actions** 部署到 Pages，不再与后端同源，因此必须让浏览器知道 API 的根地址。
+默认由 **Railway 同源** 提供页面与 API，一般无需单独 Pages。
 
-**方式 A — 手动（改一行 HTML）**
+若必须把静态页托管到 **GitHub Pages** 等第三方：在 `frontend/index.html` 中取消注释 `meta name="api-base"`，将 `content` 设为 Railway 的 **HTTPS 根地址**（无末尾 `/`）。
 
-1. 打开 `frontend/index.html`，找到：
-
-   `<meta name="api-base" content="" />`
-
-2. 将 `content` 改为你的 **Railway HTTPS 根地址**（与 **Settings → Networking → Generate Domain** 一致，**无末尾 /**），例如：
-
-   `content="https://your-service.up.railway.app"`
-
-3. 提交并推送；见下方「启用 Actions」。
-
-**方式 B — 仓库 Secret（推送时自动写入 meta，可不把域名提交进 Git）**
-
-1. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**
-2. Name：`RAILWAY_PUBLIC_URL`，Value：`https://your-service.up.railway.app`
-3. 推送后 Workflow 会在部署前把该值写入 `frontend/index.html` 里的 `api-base`。
-
-**启用 Pages**
-
-1. **Settings → Pages → Build and deployment**：Source 选 **GitHub Actions**（不要选 Branch）。
-2. 推送 `main` 或手动运行 **Actions → Deploy frontend to GitHub Pages**。完成后 Pages 地址一般为：
-
-   `https://<用户名>.github.io/<仓库名>/`
-
-**说明：** 仅用 Railway、**不需要** Pages 时，保持 `content=""` 即可（同一域名同源访问 API）。
-
-后端已配置 `CORSMiddleware`（`allow_origins=["*"]`），GitHub Pages 域名可跨域调用 Railway API。
+后端已配置 `CORSMiddleware`（`allow_origins=["*"]`），便于跨域调用 API。
 
 ### 3.4 其它云平台
 
@@ -218,7 +193,7 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 | 关键信息提取 | 必选四字段 + 求职/背景类加分字段（LLM JSON Schema） |
 | 评分与匹配 | JD 关键词、技能/经验/学历维度与综合分（LLM） |
 | JSON 返回 | 全部接口 Pydantic 序列化为 JSON |
-| 前端页面 | `frontend/`；Railway 同源或 **GitHub Actions → Pages** + `api-base` 指向 Railway |
+| 前端页面 | `frontend/` 由 FastAPI 同源托管；可选 GitHub Pages + `api-base` 指向 Railway |
 
 ---
 
@@ -233,8 +208,7 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ## 笔试提交检查清单
 
 - [ ] GitHub **公开** 仓库
-- [ ] 本文顶部 **线上演示 URL** 已替换（**Railway** 与可选 **GitHub Pages**）
-- [ ] **Settings → Pages** 已选 **GitHub Actions**（若启用 Pages）；`api-base` 或 Secret `RAILWAY_PUBLIC_URL` 已配置
+- [ ] 本文顶部 **Railway 线上演示 URL** 可访问
 - [ ] 演示页可完成一次「PDF + JD」分析
 - [ ] `OPENAI_API_KEY` 仅存在于本地 `.env` / Railway Variables，未写入源码
 
