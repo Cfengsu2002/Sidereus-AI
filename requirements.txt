@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+pypdf
+requests
+openai>=1.0.0

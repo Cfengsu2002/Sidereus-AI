@@ -1,0 +1,13 @@
+# 本地试运行：在项目根目录准备 .env（含 OPENAI_API_KEY），然后：
+#   docker compose up --build
+
+services:
+  resume-api:
+    build: .
+    ports:
+      - "9000:9000"
+    environment:
+      PORT: "9000"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
