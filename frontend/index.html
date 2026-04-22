@@ -8,8 +8,13 @@
       name="description"
       content="上传 PDF 简历与岗位 JD，一键获取结构化信息与 AI 匹配评分。"
     />
-    <!-- 仅当静态页托管在 GitHub Pages 等与 API 不同域时：填写后端 HTTPS 根地址，勿带末尾 / -->
-    <!-- <meta name="api-base" content="https://你的函数计算域名" /> -->
+    <!--
+      后端公网地址（GitHub Pages / 本地打开静态页时用）。勿带末尾 /。
+      若仅在 Railway 同源访问且希望 meta 不占位，可改为 content=""（走同源 /api）。
+      本地开发若要连本机 uvicorn，也可临时改为 content="" 。
+      CI：可用仓库 Secret RAILWAY_PUBLIC_URL 由 workflow 注入。
+    -->
+    <meta name="api-base" content="https://sidereus-ai-production.up.railway.app" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
