@@ -3,12 +3,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from backend.controllers.resume_controller import router as resume_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 
@@ -24,8 +22,7 @@ app.add_middleware(
 
 app.include_router(resume_router)
 
-app.mount(
-    "/",
-    StaticFiles(directory=str(FRONTEND_DIR), html=True),
-    name="frontend",
-)
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "Backend API is running. Visit /docs for API docs."}

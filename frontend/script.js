@@ -1,6 +1,7 @@
 /**
- * API 根地址（不要末尾 /）。线上 Railway 与页面同源，留空即可走 /api/...。
- * 本地：127.0.0.1:5500 静态页指向本机 8000；其余本机端口与后端同源则留空。
+ * API 根地址（不要末尾 /）。
+ * 当前改为前后端不同源：前端默认调用 Railway API。
+ * 本地仅在 5500 静态服务时，自动指向本机 8000。
  */
 function resolveApiBaseUrl() {
   const meta = document.querySelector('meta[name="api-base"]');
@@ -10,9 +11,9 @@ function resolveApiBaseUrl() {
   if (hostname === "127.0.0.1" || hostname === "localhost") {
     // 仅「静态页单独起在 5500」时指向本机后端；Docker 9000 / uvicorn 8000 等与 API 同源
     if (port === "5500") return "http://127.0.0.1:8000";
-    return "";
+    return "https://sidereus-ai-production.up.railway.app";
   }
-  return "";
+  return "https://sidereus-ai-production.up.railway.app";
 }
 
 const API_BASE_URL = resolveApiBaseUrl();

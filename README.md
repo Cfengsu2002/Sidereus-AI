@@ -1,10 +1,10 @@
 # Sidereus AI · 智能简历分析系统（Resume Lab）
 
-基于 **FastAPI** 与 **OpenAI** 的简历解析与岗位匹配服务：上传 PDF 简历、粘贴岗位描述（JD），返回结构化解析结果与匹配评分。前端为静态 HTML/CSS/JS，由后端 **同源托管**，便于一键部署。
+基于 **FastAPI** 与 **OpenAI** 的简历解析与岗位匹配服务：上传 PDF 简历、粘贴岗位描述（JD），返回结构化解析结果与匹配评分。前端为静态 HTML/CSS/JS，采用**前后端分离（不同源）**：前端可独立托管，API 由 Railway 提供。
 
 **仓库：** [github.com/Cfengsu2002/Sidereus-AI](https://github.com/Cfengsu2002/Sidereus-AI)  
 
-**线上访问（仅此一处，页面与 API 同源）：** [https://sidereus-ai-production.up.railway.app/](https://sidereus-ai-production.up.railway.app/) · 健康检查：`GET /api/v1/health` · API 文档：`/docs`
+**线上 API（Railway）：** [https://sidereus-ai-production.up.railway.app/](https://sidereus-ai-production.up.railway.app/) · 健康检查：`GET /api/v1/health` · API 文档：`/docs`
 
 笔试题目建议的运行环境为 **阿里云 Serverless（函数计算 FC）**。作者在阿里云控制台开通 **函数计算** 时，订单被系统中止，提示「**为保护您的账户安全，下单被中止，详情请联系客服**」，在限定时间内未能完成 FC 账号侧开通与资源创建，无法在阿里侧落地部署。
 
@@ -18,7 +18,7 @@
 
 ### 总体结构
 
-采用 **前后端一体化部署**：浏览器只访问一个 HTTPS 域名；静态页面与 REST API 同源，减少跨域配置。核心业务按 **路由层 → 服务层** 拆分，PDF 与 LLM 调用隔离在独立 Service 中，便于测试与替换实现。
+采用 **前后端分离部署**：前端静态资源独立托管，浏览器通过跨域请求访问 Railway API。核心业务按 **路由层 → 服务层** 拆分，PDF 与 LLM 调用隔离在独立 Service 中，便于测试与替换实现。
 
 ```mermaid
 flowchart TB
@@ -64,13 +64,13 @@ flowchart TB
 
 | 路径 | 职责 |
 |------|------|
-| `backend/main.py` | 应用入口：CORS、`/api/v1` 路由挂载、`frontend/` 静态托管 |
+| `backend/main.py` | 应用入口：CORS、`/api/v1` 路由挂载（仅 API） |
 | `backend/controllers/` | RESTful 路由：`/health`、`/resume/parse`、`/resume/match`、`/resume/analyze` |
 | `backend/services/pdf_service.py` | 多页 PDF 文本提取 |
 | `backend/services/llm_service.py` | OpenAI：简历清洗、分段、关键字段抽取 |
 | `backend/services/scores_service.py` | OpenAI：JD 关键词与匹配度评分 |
 | `backend/schemas/` | Pydantic 模型，统一 JSON 响应结构 |
-| `frontend/` | 交互页面，与后端同源由 FastAPI 托管 |
+| `frontend/` | 交互页面，可独立托管（GitHub Pages/本地静态服务） |
 
 ---
 
@@ -84,7 +84,7 @@ flowchart TB
 | PDF | **pypdf** | 纯 Python，多页 `PdfReader` 抽取文本，满足笔试「多页简历」 |
 | AI 调用 | **OpenAI 官方 SDK** | 使用 Responses API + **JSON Schema** 约束输出，降低解析失败与非结构化字段 |
 | 模型配置 | **环境变量** `OPENAI_MODEL` | 默认可在代码中兜底；线上通过 Variables 覆盖，便于切换模型 |
-| 前端 | **原生 HTML/CSS/JS** | 无构建链路，静态资源由 FastAPI `StaticFiles` 托管，部署简单 |
+| 前端 | **原生 HTML/CSS/JS** | 无构建链路，可独立托管，跨域调用 Railway API |
 | 容器 | **Dockerfile** | 单一镜像包含后端与 `frontend`，监听 **`PORT`**，兼容 Railway 等平台注入 |
 | 云平台 | **Railway** | 连接 GitHub 自动构建 Docker；**Variables** 注入密钥；**Generate Domain** 提供 HTTPS 演示地址 |
 
@@ -144,14 +144,21 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 | 用途 | 地址 |
 |------|------|
-| 线上（Railway） | https://sidereus-ai-production.up.railway.app/ |
-| 本地前端 | http://127.0.0.1:8000/ |
-| Swagger | `/docs`（接在上述域名后） |
-| 健康检查 | `/api/v1/health` |
+| 线上 API（Railway） | https://sidereus-ai-production.up.railway.app/ |
+| 本地后端 API | http://127.0.0.1:8000/ |
+| 本地前端静态服务（分离） | http://127.0.0.1:5500/ |
+| Swagger | `https://sidereus-ai-production.up.railway.app/docs`（或本地 `http://127.0.0.1:8000/docs`） |
+| 健康检查 | `https://sidereus-ai-production.up.railway.app/api/v1/health` |
 
-### 4.2 网页操作（线上或本地同源）
+本地前后端分离调试可执行：
 
-1. 打开站点根路径 `/`。
+```bash
+cd frontend && python3 -m http.server 5500 --bind 127.0.0.1
+```
+
+### 4.2 网页操作（前后端分离）
+
+1. 打开前端页面（例如 `http://127.0.0.1:5500/` 或你的静态托管地址）。
 2. 选择 **PDF 简历**（仅支持单个 PDF）。
 3. 粘贴 **岗位描述**，不少于 **20** 字。
 4. 点击分析，查看结构化结果与匹配评分；可复制 JSON。
@@ -187,7 +194,7 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 | 关键信息提取 | 必选四字段 + 求职/背景类加分字段（LLM JSON Schema） |
 | 评分与匹配 | JD 关键词、技能/经验/学历维度与综合分（LLM） |
 | JSON 返回 | 全部接口 Pydantic 序列化为 JSON |
-| 前端页面 | `frontend/` 由 FastAPI 同源托管；线上见文首 Railway 地址 |
+| 前端页面 | `frontend/` 独立托管，默认调用 Railway API（不同源） |
 
 ---
 
