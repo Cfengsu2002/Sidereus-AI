@@ -1,7 +1,8 @@
 # **AI 赋能的智能简历分析系统**
 
 基于 **FastAPI + OpenAI** 的简历分析服务。上传 PDF 简历并输入岗位 JD，返回结构化解析结果与匹配评分。
-
+<img width="886" height="573" alt="image" src="https://github.com/user-attachments/assets/9629d3b2-6e67-4ba3-967f-828abc23a594" />
+然后因为函数计算我用不了在美国，就用Railway了
 - 后端：Railway
 - 前端：GitHub Pages
 
