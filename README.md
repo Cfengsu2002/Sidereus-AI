@@ -1,220 +1,272 @@
 # Sidereus AI · 智能简历分析系统（Resume Lab）
 
-基于 **FastAPI** 与 **OpenAI** 的简历解析与岗位匹配服务：上传 PDF 简历、粘贴岗位描述（JD），返回结构化解析结果与匹配评分。前端为静态 HTML/CSS/JS，采用**前后端分离（不同源）**：前端可独立托管，API 由 Railway 提供。
+基于 **FastAPI + OpenAI** 的简历分析服务。上传 PDF 简历并输入岗位 JD，返回结构化解析结果与匹配评分。
 
-**仓库：** [github.com/Cfengsu2002/Sidereus-AI](https://github.com/Cfengsu2002/Sidereus-AI)  
+- 后端：Railway（API）
+- 前端：GitHub Pages（静态页面）
+- 形态：前后端分离（不同源）
 
-**线上 API（Railway）：** [https://sidereus-ai-production.up.railway.app/](https://sidereus-ai-production.up.railway.app/) · 健康检查：`GET /api/v1/health` · API 文档：`/docs`
-
-笔试题目建议的运行环境为 **阿里云 Serverless（函数计算 FC）**。作者在阿里云控制台开通 **函数计算** 时，订单被系统中止，提示「**为保护您的账户安全，下单被中止，详情请联系客服**」，在限定时间内未能完成 FC 账号侧开通与资源创建，无法在阿里侧落地部署。
-
-因此在本次提交中选用 **Railway**：以同一 **Dockerfile** 交付 **容器化 Python 后端**，暴露 **HTTPS 公网地址**，满足笔试对 **RESTful API**、**可线上验收** 的要求；架构上仍可与 FC「自定义镜像」对齐，后续账号恢复后可再将镜像推送至阿里云 ACR、在 FC 部署。
-
-本文档对应笔试要求，包含：**项目架构**、**技术选型**、**部署方式**、**使用说明**。
+**仓库地址：** [https://github.com/Cfengsu2002/Sidereus-AI](https://github.com/Cfengsu2002/Sidereus-AI)  
+**后端 API：** [https://sidereus-ai-production.up.railway.app](https://sidereus-ai-production.up.railway.app)  
+**API 文档：** [https://sidereus-ai-production.up.railway.app/docs](https://sidereus-ai-production.up.railway.app/docs)  
+**健康检查：** [https://sidereus-ai-production.up.railway.app/api/v1/health](https://sidereus-ai-production.up.railway.app/api/v1/health)  
+**前端页面（GitHub Pages）：** `https://cfengsu2002.github.io/Sidereus-AI/`（启用后可访问）
 
 ---
 
-## 一、项目架构
+## 项目架构
 
-### 总体结构
+当前项目采用 **前后端分离（不同源）**：
 
-采用 **前后端分离部署**：前端静态资源独立托管，浏览器通过跨域请求访问 Railway API。核心业务按 **路由层 → 服务层** 拆分，PDF 与 LLM 调用隔离在独立 Service 中，便于测试与替换实现。
+- 前端：GitHub Pages 托管静态页面（`index.html` + `script.js` + `styles.css`）
+- 后端：Railway 托管 FastAPI（仅 API，不托管静态资源）
+- AI：后端通过 OpenAI SDK 调用大模型完成抽取与评分
+
+### 1) 部署拓扑
 
 ```mermaid
-flowchart TB
-    subgraph Client["客户端"]
-        Browser["浏览器 / Postman"]
-    end
-
-    subgraph Backend["后端 FastAPI"]
-        Router["controllers：REST 路由"]
-        PDF["pdf_service：多页 PDF 文本"]
-        LLM["llm_service：清洗 / 结构化 / 关键信息"]
-        Score["scores_service：JD 关键词与匹配评分"]
-        Router --> PDF
-        Router --> LLM
-        Router --> Score
-        LLM --> Score
-    end
-
-    subgraph Static["静态资源"]
-        FE["frontend：HTML/CSS/JS"]
-    end
-
-    subgraph External["外部"]
-        OAI["OpenAI API"]
-    end
-
-    Browser --> Router
-    Browser --> FE
-    PDF --> Router
-    LLM --> OAI
-    Score --> OAI
+flowchart LR
+  A[GitHub Pages Frontend] -->|HTTPS /api/v1/*| B[FastAPI API<br/>deployed on Railway]
+  B --> C[pdf_service]
+  B --> D[llm_service]
+  B --> E[scores_service]
+  D --> F[OpenAI API]
+  E --> F
 ```
 
-### 请求链路（以「一键分析」为例）
+### 2) 后端分层设计
 
-1. **上传**：`POST /api/v1/resume/analyze`，`multipart/form-data`：`file`（PDF）、`job_description`（文本）。
-2. **PDF**：`pdf_service` 逐页抽取纯文本，得到 `page_count` 与正文。
-3. **解析**：`llm_service` 对正文清洗、分段，并按 JSON Schema 抽取基本信息、求职信息、背景信息等。
-4. **匹配**：`scores_service` 结合 JD 与简历正文（及结构化摘要），由 LLM 输出关键词、重叠项与各维度评分。
-5. **响应**：返回 JSON（`ResumeAnalyzeResponse`：`parse` + `match`）。
+- **Controller 层**（`backend/controllers/resume_controller.py`）
+  - 负责路由定义、参数校验、异常映射（400/502）、响应拼装
+  - 对外暴露 `/health`、`/resume/parse`、`/resume/match`、`/resume/analyze`
+- **Service 层**
+  - `pdf_service`：从上传的 PDF（二进制）提取多页文本与页数
+  - `llm_service`：清洗文本、分段并抽取结构化关键信息（JSON Schema）
+  - `scores_service`：对 JD 与简历做关键词与匹配评分（JSON Schema）
+- **Schema 层**（`backend/schemas/`）
+  - 用 Pydantic 统一响应结构，确保接口输出稳定
 
-### 目录与职责
+### 3) 核心时序（`POST /api/v1/resume/analyze`）
 
-| 路径 | 职责 |
-|------|------|
-| `backend/main.py` | 应用入口：CORS、`/api/v1` 路由挂载（仅 API） |
-| `backend/controllers/` | RESTful 路由：`/health`、`/resume/parse`、`/resume/match`、`/resume/analyze` |
-| `backend/services/pdf_service.py` | 多页 PDF 文本提取 |
-| `backend/services/llm_service.py` | OpenAI：简历清洗、分段、关键字段抽取 |
-| `backend/services/scores_service.py` | OpenAI：JD 关键词与匹配度评分 |
-| `backend/schemas/` | Pydantic 模型，统一 JSON 响应结构 |
-| `frontend/` | 交互页面，可独立托管（GitHub Pages/本地静态服务） |
+```mermaid
+sequenceDiagram
+  participant FE as Frontend (GitHub Pages)
+  participant API as FastAPI (Railway)
+  participant PDF as pdf_service
+  participant LLM as llm_service
+  participant SCORE as scores_service
+  participant OAI as OpenAI API
 
----
-
-## 二、技术选型
-
-| 类别 | 选型 | 说明 |
-|------|------|------|
-| 语言与运行时 | **Python 3.11** | 与笔试要求一致，生态成熟 |
-| Web 框架 | **FastAPI** | 原生异步、自动 OpenAPI（`/docs`）、类型提示与 Pydantic 校验，适合 RESTful API |
-| ASGI 服务器 | **Uvicorn** | 生产级 ASGI，与 FastAPI 标配组合 |
-| PDF | **pypdf** | 纯 Python，多页 `PdfReader` 抽取文本，满足笔试「多页简历」 |
-| AI 调用 | **OpenAI 官方 SDK** | 使用 Responses API + **JSON Schema** 约束输出，降低解析失败与非结构化字段 |
-| 模型配置 | **环境变量** `OPENAI_MODEL` | 默认可在代码中兜底；线上通过 Variables 覆盖，便于切换模型 |
-| 前端 | **原生 HTML/CSS/JS** | 无构建链路，可独立托管，跨域调用 Railway API |
-| 容器 | **Dockerfile** | 单一镜像包含后端与 `frontend`，监听 **`PORT`**，兼容 Railway 等平台注入 |
-| 云平台 | **Railway** | 连接 GitHub 自动构建 Docker；**Variables** 注入密钥；**Generate Domain** 提供 HTTPS 演示地址 |
-
-**未实现（笔试加分项）**：结果 **Redis 缓存**；当前每次请求完整调用 LLM，便于评审复现一致结果。
-
----
-
-## 三、部署方式
-
-### 3.0 与阿里云函数计算（FC）的关系
-
-| 题目建议 | 本次交付 |
-|---------|---------|
-| 阿里云 FC 等 Serverless | **Railway**（容器托管 + 自动生成公网域名） |
-
-**选用 Railway 的直接原因：** 作者在开通阿里云「函数计算」时出现**账户侧风控/安全策略拦截**（无法正常完成开通），并非实现方案排斥 FC。本项目 **Dockerfile** 仍可照阿里云文档推送到 **容器镜像服务 ACR** → **函数计算自定义容器**，与题目技术路径兼容；若评审需验证 FC，可在账号允许后沿用同一镜像部署。
-
-### 3.1 推荐：Railway（Docker）
-
-1. 将代码推送到 **GitHub**（建议 **Public**，便于笔试提交）。
-2. 登录 [Railway](https://railway.app) → **New Project** → **Deploy from GitHub**，选择本仓库。
-3. 选中 **Sidereus-AI** 服务 → **Variables**，至少添加：
-   - **`OPENAI_API_KEY`**（必填）
-   - 可选：`OPENAI_BASE_URL`、`OPENAI_MODEL`
-4. **Settings → Networking → Generate Domain**，生成公网 HTTPS 域名（未生成则服务为 *Unexposed*，浏览器无法访问）。
-5. 部署完成后访问：`https://<your-domain>/` 为前端，`GET https://<your-domain>/api/v1/health` 应返回 `{"status":"ok"}`。
-
-构建说明：Railway 识别根目录 **Dockerfile**，容器内进程监听 **`PORT`**（平台自动注入）。
-
-### 3.2 本地 Docker（可选）
-
-```bash
-docker build -t resume-api:latest .
-docker run --rm -p 9000:9000 --env-file .env -e PORT=9000 resume-api:latest
+  FE->>API: 上传 file + job_description
+  API->>PDF: extract_text_from_pdf(file_bytes)
+  PDF-->>API: raw_text + page_count
+  API->>LLM: analyze_resume_with_llm(cleaned_text)
+  LLM->>OAI: responses.create(JSON schema)
+  OAI-->>LLM: structured resume
+  LLM-->>API: ai_result
+  API->>SCORE: compute_job_match(jd, cleaned_text, ai_result)
+  SCORE->>OAI: responses.create(JSON schema)
+  OAI-->>SCORE: match scores
+  SCORE-->>API: match_payload
+  API-->>FE: ResumeAnalyzeResponse(parse + match)
 ```
 
-或使用 `docker compose up --build`（参见仓库内 `docker-compose.yml`）。
+### 4) 关键设计说明
 
-### 3.3 其它云平台
+- `pdf_service` 是主链路必经步骤：LLM 输入来自 PDF 抽取后的文本。
+- `scores_service` 使用 `llm_service` 的结构化结果作为 `resume_structured_hint`，提升匹配稳定性。
+- CORS 允许跨域，保证 GitHub Pages 可以直接调用 Railway API。
+- 缓存当前未实现（每次请求都会重新调用模型），与笔试说明中的加分项一致。
 
-任意支持 **Docker** 或 **Python + `uvicorn backend.main:app`** 的环境均可部署；镜像与启动命令与上文一致，需自行配置 HTTPS 与环境变量。
+### 目录结构
+
+```text
+backend/
+  main.py
+  controllers/
+  services/
+  schemas/
+frontend/
+  index.html
+  script.js
+  styles.css
+Dockerfile
+docker-compose.yml
+requirements.txt
+```
 
 ---
 
-## 四、使用说明
+## 技术选型
 
-### 4.1 本地开发
+- **FastAPI + Uvicorn**：RESTful API、自动文档、类型友好
+- **pypdf**：多页 PDF 文本抽取
+- **OpenAI SDK**：简历结构化提取与 JD 匹配评分
+- **Pydantic**：统一响应结构与字段约束
+- **Docker + Railway**：后端容器化部署
+- **GitHub Pages**：前端静态托管
+
+---
+
+## 功能实现（对照笔试）
+
+### 模块一：简历上传与解析（必选）
+- 支持单个 PDF 上传
+- 支持多页文本抽取
+- 对文本进行清洗与结构化处理
+
+### 模块二：关键信息提取（必选）
+- 必选字段：姓名、电话、邮箱、地址
+- 加分字段：求职意向、期望薪资、工作年限、学历背景、项目经历
+
+### 模块三：简历评分与匹配（必选）
+- 接收 JD 文本
+- 提取关键词与重叠项
+- 输出技能匹配率、经验相关性、学历相关性、综合评分
+
+### 模块四：结果返回与缓存（必选）
+- JSON 结构化返回（已完成）
+- Redis 缓存（未实现，加分项）
+
+### 模块五：前端页面（必选）
+- 已提供可交互前端页面
+- 支持独立部署到 GitHub Pages
+
+---
+
+## 接口说明
+
+基础前缀：`/api/v1`
+
+- `GET /health`：健康检查
+- `POST /resume/parse`：仅解析简历
+- `POST /resume/match`：仅做匹配评分
+- `POST /resume/analyze`：解析 + 匹配（推荐）
+
+`/resume/analyze` 入参为 `multipart/form-data`：
+- `file`：PDF 简历
+- `job_description`：岗位 JD（不少于 20 字）
+
+---
+
+## 使用说明
+
+### 1) 本地启动后端 API
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env               # 编辑 .env，填入 OPENAI_API_KEY
-
+cp .env.example .env
+# 编辑 .env，填入 OPENAI_API_KEY
 uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-| 用途 | 地址 |
-|------|------|
-| 线上 API（Railway） | https://sidereus-ai-production.up.railway.app/ |
-| 本地后端 API | http://127.0.0.1:8000/ |
-| 本地前端静态服务（分离） | http://127.0.0.1:5500/ |
-| Swagger | `https://sidereus-ai-production.up.railway.app/docs`（或本地 `http://127.0.0.1:8000/docs`） |
-| 健康检查 | `https://sidereus-ai-production.up.railway.app/api/v1/health` |
+启动后可访问：
+- 本地 API：`http://127.0.0.1:8000`
+- 本地 API 文档：`http://127.0.0.1:8000/docs`
 
-本地前后端分离调试可执行：
+### 2) 本地启动前端（分离模式）
 
 ```bash
-cd frontend && python3 -m http.server 5500 --bind 127.0.0.1
+cd frontend
+python3 -m http.server 5500 --bind 127.0.0.1
 ```
 
-### 4.2 网页操作（前后端分离）
+访问：
+- 前端：`http://127.0.0.1:5500`
+- 后端 API：`http://127.0.0.1:8000`
 
-1. 打开前端页面（例如 `http://127.0.0.1:5500/` 或你的静态托管地址）。
-2. 选择 **PDF 简历**（仅支持单个 PDF）。
-3. 粘贴 **岗位描述**，不少于 **20** 字。
-4. 点击分析，查看结构化结果与匹配评分；可复制 JSON。
+### 3) 线上使用（推荐给评审）
 
-### 4.3 REST API 摘要
+- 前端（GitHub Pages）：`https://cfengsu2002.github.io/Sidereus-AI/`
+- 后端（Railway API）：`https://sidereus-ai-production.up.railway.app`
+- 健康检查：`https://sidereus-ai-production.up.railway.app/api/v1/health`
 
-前缀：**`/api/v1`**。
+在页面中操作步骤：
+1. 上传单个 PDF 简历
+2. 输入岗位 JD（至少 20 字）
+3. 点击“上传并分析”
+4. 查看解析结果与匹配评分，必要时复制完整 JSON
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/health` | 存活探测 |
-| POST | `/resume/parse` | `multipart`：`file`（PDF）— 解析与关键信息 |
-| POST | `/resume/match` | `multipart`：`file`、`job_description` — 仅匹配评分 |
-| POST | `/resume/analyze` | `multipart`：`file`、`job_description` — **推荐**，解析 + 匹配一次返回 |
+### 4) API 调用示例（`/resume/analyze`）
 
-完整参数与响应字段见 **`/docs`**（OpenAPI）。
+```bash
+curl -X POST "https://sidereus-ai-production.up.railway.app/api/v1/resume/analyze" \
+  -F "file=@/path/to/resume.pdf" \
+  -F "job_description=负责 Python 后端开发，熟悉 FastAPI、数据库与部署流程，有良好工程规范。"
+```
 
-### 4.4 环境变量说明
+返回结果包含两部分：
+- `parse`：简历清洗、分段与关键信息抽取
+- `match`：关键词分析与匹配评分（含 `overall_score`）
 
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `OPENAI_API_KEY` | 线上必填 | 部署在 Railway **Variables** 中配置；本地放在 `.env`，**勿提交 Git** |
-| `OPENAI_BASE_URL` | 否 | 兼容网关 / 代理 |
-| `OPENAI_MODEL` | 否 | 覆盖默认模型名 |
+### 5) 验收检查（提交前）
+
+- `GET /api/v1/health` 返回 `{"status":"ok"}`
+- 页面可完成一次真实 PDF + JD 分析
+- 无 `Missing OPENAI_API_KEY` 报错
+- README 中仓库/API/页面地址都可访问
 
 ---
 
-## 功能与模块对照（笔试）
+## 部署方式
 
-| 模块 | 实现要点 |
-|------|-----------|
-| 简历上传与解析 | 单 PDF、多页抽取、清洗与结构化（LLM） |
-| 关键信息提取 | 必选四字段 + 求职/背景类加分字段（LLM JSON Schema） |
-| 评分与匹配 | JD 关键词、技能/经验/学历维度与综合分（LLM） |
-| JSON 返回 | 全部接口 Pydantic 序列化为 JSON |
-| 前端页面 | `frontend/` 独立托管，默认调用 Railway API（不同源） |
+## 后端部署（Railway）
+
+1. 将仓库推送到 GitHub
+2. Railway 新建项目，选择该仓库
+3. 配置 Variables：
+   - `OPENAI_API_KEY`（必填）
+   - `OPENAI_BASE_URL`（可选）
+   - `OPENAI_MODEL`（可选）
+4. 生成公网域名并验证 `/api/v1/health`
+
+## 前端部署（GitHub Pages）
+
+本项目已改为**单一前端目录**：只保留 `frontend/`，由 GitHub Actions 直接发布到 Pages。
+
+在 GitHub 仓库设置：
+- `Settings -> Pages`
+- Source 选择 `GitHub Actions`
+
+然后推送代码到 `main`（或在 Actions 手动运行），工作流会自动发布 `frontend/`。
+
+---
+
+## 环境变量
+
+- `OPENAI_API_KEY`：必填
+- `OPENAI_BASE_URL`：可选
+- `OPENAI_MODEL`：可选
+
+注意：`.env` 仅用于本地开发，线上请在 Railway Variables 中配置。
 
 ---
 
 ## 常见问题
 
-- **`Missing OPENAI_API_KEY`**：在 Railway **Variables** 配置 `OPENAI_API_KEY` 并等待重新部署。
-- **部署成功但无法访问**：在服务 **Settings → Networking** 执行 **Generate Domain**。
-- **笔试环境说明**：题目曾提及阿里云 FC；因开通 FC 时遇账户侧中止提示，本期采用 **Docker + Railway** 交付线上演示；镜像与 REST 设计与 FC 自定义容器部署兼容。
+- **报错 `Missing OPENAI_API_KEY`**  
+  Railway 未配置变量，补充后重新部署。
+
+- **GitHub Pages 打开但无法分析**  
+  检查后端 Railway 地址是否可访问，且浏览器请求未被拦截。
+
+- **跨域问题**  
+  后端已开启 CORS（`allow_origins=["*"]`），通常可直接联通。
 
 ---
 
-## 笔试提交检查清单
+## 提交检查清单
 
-- [ ] GitHub **公开** 仓库
-- [ ] 本文顶部 **Railway 线上演示 URL** 可访问
-- [ ] 演示页可完成一次「PDF + JD」分析
-- [ ] `OPENAI_API_KEY` 仅存在于本地 `.env` / Railway Variables，未写入源码
+- [ ] GitHub 仓库公开可访问
+- [ ] Railway API 可访问
+- [ ] GitHub Pages 前端可访问
+- [ ] 上传 PDF + 输入 JD 可完成一次完整分析
+- [ ] README 中地址与说明为最新
 
 ---
 
 ## License
 
-本项目为 Sidereus AI 招聘笔试作品；如需单独协议请与招聘方确认。
+本项目为 Sidereus AI 招聘笔试作品。
