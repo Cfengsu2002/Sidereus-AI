@@ -3,7 +3,8 @@
 基于 **FastAPI** 与 **OpenAI** 的简历解析与岗位匹配服务：上传 PDF 简历、粘贴岗位描述（JD），返回结构化解析结果与匹配评分。前端为静态 HTML/CSS/JS，由后端 **同源托管**，便于一键部署。
 
 **仓库：** [github.com/Cfengsu2002/Sidereus-AI](https://github.com/Cfengsu2002/Sidereus-AI)  
-**线上演示（Railway）：** https://sidereus-ai-production.up.railway.app · 健康检查：`/api/v1/health`
+
+**线上访问（仅此一处，页面与 API 同源）：** [https://sidereus-ai-production.up.railway.app/](https://sidereus-ai-production.up.railway.app/) · 健康检查：`GET /api/v1/health` · API 文档：`/docs`
 
 笔试题目建议的运行环境为 **阿里云 Serverless（函数计算 FC）**。作者在阿里云控制台开通 **函数计算** 时，订单被系统中止，提示「**为保护您的账户安全，下单被中止，详情请联系客服**」，在限定时间内未能完成 FC 账号侧开通与资源创建，无法在阿里侧落地部署。
 
@@ -69,7 +70,7 @@ flowchart TB
 | `backend/services/llm_service.py` | OpenAI：简历清洗、分段、关键字段抽取 |
 | `backend/services/scores_service.py` | OpenAI：JD 关键词与匹配度评分 |
 | `backend/schemas/` | Pydantic 模型，统一 JSON 响应结构 |
-| `frontend/` | 交互页面；跨域部署时可经 `meta name="api-base"` 指向后端 |
+| `frontend/` | 交互页面，与后端同源由 FastAPI 托管 |
 
 ---
 
@@ -122,15 +123,7 @@ docker run --rm -p 9000:9000 --env-file .env -e PORT=9000 resume-api:latest
 
 或使用 `docker compose up --build`（参见仓库内 `docker-compose.yml`）。
 
-### 3.3 前端单独托管（GitHub Pages 等，可选）
-
-默认由 **Railway 同源** 提供页面与 API，一般无需单独 Pages。
-
-若必须把静态页托管到 **GitHub Pages** 等第三方：在 `frontend/index.html` 中取消注释 `meta name="api-base"`，将 `content` 设为 Railway 的 **HTTPS 根地址**（无末尾 `/`）。
-
-后端已配置 `CORSMiddleware`（`allow_origins=["*"]`），便于跨域调用 API。
-
-### 3.4 其它云平台
+### 3.3 其它云平台
 
 任意支持 **Docker** 或 **Python + `uvicorn backend.main:app`** 的环境均可部署；镜像与启动命令与上文一致，需自行配置 HTTPS 与环境变量。
 
@@ -151,9 +144,10 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 | 用途 | 地址 |
 |------|------|
-| 前端页面 | http://127.0.0.1:8000/ |
-| Swagger 文档 | http://127.0.0.1:8000/docs |
-| 健康检查 | http://127.0.0.1:8000/api/v1/health |
+| 线上（Railway） | https://sidereus-ai-production.up.railway.app/ |
+| 本地前端 | http://127.0.0.1:8000/ |
+| Swagger | `/docs`（接在上述域名后） |
+| 健康检查 | `/api/v1/health` |
 
 ### 4.2 网页操作（线上或本地同源）
 
@@ -193,7 +187,7 @@ uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 | 关键信息提取 | 必选四字段 + 求职/背景类加分字段（LLM JSON Schema） |
 | 评分与匹配 | JD 关键词、技能/经验/学历维度与综合分（LLM） |
 | JSON 返回 | 全部接口 Pydantic 序列化为 JSON |
-| 前端页面 | `frontend/` 由 FastAPI 同源托管；可选 GitHub Pages + `api-base` 指向 Railway |
+| 前端页面 | `frontend/` 由 FastAPI 同源托管；线上见文首 Railway 地址 |
 
 ---
 

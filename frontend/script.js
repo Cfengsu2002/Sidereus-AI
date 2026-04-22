@@ -1,7 +1,6 @@
 /**
- * API 根地址（不要末尾 /）。
- * 优先级：index.html 里 <meta name="api-base" content="https://你的后端">；
- * 未配置时：本地 8000 同源留空；127.0.0.1 其它端口指向本地后端；其余视为与页面同源（仅后端托管时）。
+ * API 根地址（不要末尾 /）。线上 Railway 与页面同源，留空即可走 /api/...。
+ * 本地：127.0.0.1:5500 静态页指向本机 8000；其余本机端口与后端同源则留空。
  */
 function resolveApiBaseUrl() {
   const meta = document.querySelector('meta[name="api-base"]');
